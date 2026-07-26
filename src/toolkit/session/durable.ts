@@ -14,6 +14,7 @@
  */
 
 import type { StorageAdapter } from "grammy";
+import { applyQuotes, evaluateAlerts, fetchQuotes, morningSummaryText, now, type Profile } from "../../crypto.js";
 
 // Minimal shapes so this file type-checks without pulling @cloudflare/workers-types
 // into the Node build. The real bindings are provided by the Workers runtime.
@@ -49,6 +50,16 @@ interface Reminder {
   at: number; // epoch ms
   chatId: number | string;
   text: string;
+}
+interface CryptoSchedule { chatId: number | string; summaryTime?: string; monitor: boolean; }
+
+/** Keep the per-chat alarm active after a profile changes. Safe outside Workers. */
+export async function syncCryptoSchedule(env: WorkerEnv | undefined, chatId: number | string, summaryTime?: string): Promise<void> {
+  if (!env?.CHAT_DO) return;
+  try {
+    const stub = env.CHAT_DO.get(env.CHAT_DO.idFromName("chat:" + chatId));
+    await stub.fetch("https://do/crypto-schedule", { method: "POST", body: JSON.stringify({ chatId, summaryTime, monitor: true } satisfies CryptoSchedule) });
+  } catch { /* scheduling is best effort and must not break the user's settings update */ }
 }
 
 /**
@@ -154,29 +165,69 @@ export class ChatDO {
       return new Response(null, { status: 204 });
     }
 
+    if (url.pathname === "/crypto-schedule" && request.method === "POST") {
+      const schedule = (await request.json()) as CryptoSchedule;
+      await this.state.storage.put("cryptoSchedule", schedule);
+      await this.rearm((await this.state.storage.get<Reminder[]>("reminders")) ?? []);
+      return new Response(null, { status: 204 });
+    }
+
     return new Response("not found", { status: 404 });
   }
 
   // Fires at the earliest reminder's wall-clock time. Sends every due reminder,
   // drops them, and re-arms for whatever remains.
   async alarm(): Promise<void> {
-    const now = Date.now();
+    const timestamp = now();
     const list = (await this.state.storage.get<Reminder[]>("reminders")) ?? [];
-    const due = list.filter((r) => r.at <= now);
-    const rest = list.filter((r) => r.at > now);
+    const due = list.filter((r) => r.at <= timestamp);
+    const rest = list.filter((r) => r.at > timestamp);
     for (const r of due) {
       await tg(this.env.BOT_TOKEN, "sendMessage", { chat_id: r.chatId, text: r.text });
     }
     await this.state.storage.put("reminders", rest);
+    await this.processCrypto(timestamp);
     await this.rearm(rest);
   }
 
   private async rearm(list: Reminder[]): Promise<void> {
-    if (list.length === 0) return;
-    const next = Math.min(...list.map((r) => r.at));
+    const schedule = await this.state.storage.get<CryptoSchedule>("cryptoSchedule");
+    const candidates = list.map((r) => r.at);
+    if (schedule?.monitor) candidates.push(now() + 5 * 60 * 1000);
+    if (schedule?.summaryTime) candidates.push(nextSummaryAt(schedule.summaryTime));
+    if (candidates.length === 0) return;
+    const next = Math.min(...candidates);
     const current = await this.state.storage.getAlarm();
     if (current === null || next < current) {
       await this.state.storage.setAlarm(next);
     }
   }
+
+  private async processCrypto(timestamp: number): Promise<void> {
+    const schedule = await this.state.storage.get<CryptoSchedule>("cryptoSchedule");
+    if (!schedule?.monitor) return;
+    const profile = await this.state.storage.get<Profile>(`profile:${schedule.chatId}`);
+    if (!profile) return;
+    const quotes = await fetchQuotes(profile.watchlist);
+    applyQuotes(profile, quotes);
+    for (const text of evaluateAlerts(profile)) {
+      try { await tg(this.env.BOT_TOKEN, "sendMessage", { chat_id: schedule.chatId, text }); } catch { /* a blocked chat must not stop other alarms */ }
+    }
+    if (profile.morningSummary?.enabled && profile.morningSummary.time === utcTime(timestamp) && quotes.size) {
+      try { await tg(this.env.BOT_TOKEN, "sendMessage", { chat_id: schedule.chatId, text: morningSummaryText(profile) }); } catch { /* best effort */ }
+    }
+    await this.state.storage.put(`profile:${schedule.chatId}`, profile);
+  }
+}
+
+function utcTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+}
+function nextSummaryAt(time: string): number {
+  const [hour, minute] = time.split(":").map(Number);
+  const current = new Date(now());
+  const candidate = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate(), hour, minute));
+  if (candidate.getTime() <= now()) candidate.setUTCDate(candidate.getUTCDate() + 1);
+  return candidate.getTime();
 }

@@ -1,13 +1,13 @@
 [
   {
-    "name": "/price",
+    "name": "/price explains its input",
     "steps": [
       {
         "expect": [
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Check current price for a specific coin or all watchlist coins"
+              "text": "Send /price BTC or /price all to check prices."
             }
           }
         ],

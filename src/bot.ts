@@ -1,15 +1,18 @@
 import { Composer } from "grammy";
-import { createBot, type BotContext, type CreateBotOptions } from "./toolkit/index.js";
+import { createBot, resolveSessionStorage, type BotContext, type CreateBotOptions } from "./toolkit/index.js";
 import type { StorageAdapter } from "grammy";
+import type { Profile } from "./crypto.js";
 
 // The per-chat session shape (ephemeral conversation state only). Extend as the
 // bot grows. Durable domain data must NOT live here — use the toolkit's
 // persistent storage (see AGENTS.md).
 export interface Session {
-  // example: step?: "awaiting_amount";
+  /** Short-lived conversation state. Domain data is stored in `profile`. */
+  flow?: import("./crypto.js").Flow;
 }
 
-export type Ctx = BotContext<Session>;
+/** Persistent domain state is attached by buildBot's durable-profile middleware. */
+export type Ctx = BotContext<Session> & { profile?: import("./crypto.js").Profile };
 
 /**
  * BuildBotOptions lets a runtime-specific ENTRY POINT (never a feature handler)
@@ -43,11 +46,25 @@ export interface BuildBotOptions {
  * build-time manifest because Workers has no filesystem.
  */
 export async function buildBot(token: string, opts: BuildBotOptions = {}) {
+  // Use one toolkit-selected persistent adapter for two distinct record types:
+  // short-lived `session:<chat>` FSM data and durable `profile:<chat>` data.
+  const storage = opts.storage ?? resolveSessionStorage<Session>(undefined);
+  const profileStore = storage as unknown as StorageAdapter<Profile>;
   const bot = createBot<Session>(token, {
     initial: () => ({}),
-    storage: opts.storage,
+    storage,
     telemetryEnv: opts.telemetryEnv,
     telemetryReporterOptions: opts.telemetryReporterOptions,
+  });
+
+  bot.use(async (ctx, next) => {
+    const chatId = ctx.chat?.id;
+    if (chatId === undefined) return next();
+    const key = `profile:${chatId}`;
+    (ctx as Ctx).profile = await profileStore.read(key);
+    await next();
+    const profile = (ctx as Ctx).profile;
+    if (profile) await profileStore.write(key, profile);
   });
 
   const handlers = opts.handlers ?? (await loadHandlersFromDisk());

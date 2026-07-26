@@ -1,20 +1,21 @@
 [
   {
-    "name": "Morning summary",
+    "name": "Morning summary settings",
     "steps": [
       {
         "expect": [
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Configure morning summary preferences"
+              "text": "Choose when to receive your morning summary."
             }
           }
         ],
         "send": {
           "callback": "morning_summary:start"
         }
-      }
+      },
+      { "send": { "callback": "morning:time:08:00" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Your morning summary is set for 08:00 UTC." } }] }
     ]
   }
 ]
