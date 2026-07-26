@@ -1,20 +1,25 @@
 [
   {
-    "name": "Create alert",
+    "name": "Create a threshold alert",
     "steps": [
       {
-        "expect": [
-          {
-            "method": "sendMessage",
-            "payload": {
-              "text": "Set up a new price alert rule"
-            }
-          }
-        ],
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Choose a coin or type its ticker." } }],
+        "send": { "callback": "add_coin:start" }
+      },
+      {
+        "expect": [{ "method": "sendMessage", "payload": { "text": "BTC is now on your watchlist." } }],
+        "send": { "callback": "add_coin:pick:BTC" }
+      },
+      {
+        "expect": [{ "method": "sendMessage", "payload": { "text": "Choose a coin for this alert." } }],
         "send": {
           "callback": "create_alert:start"
         }
-      }
+      },
+      { "send": { "callback": "alert:coin:BTC" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Choose the alert type for BTC." } }] },
+      { "send": { "callback": "alert:type:BTC:threshold" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Send the USD price that should trigger this alert." } }] },
+      { "send": { "text": "70000" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Create an alert for BTC when it reaches $70,000.00?" } }] },
+      { "send": { "callback": "alert:confirm" }, "expect": [{ "method": "sendMessage", "payload": { "text": "BTC alert is active." } }] }
     ]
   }
 ]

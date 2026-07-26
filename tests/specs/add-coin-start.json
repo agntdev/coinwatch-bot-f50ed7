@@ -1,20 +1,22 @@
 [
   {
-    "name": "Add coin",
+    "name": "Add coin and handle a typo",
     "steps": [
       {
         "expect": [
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Begin adding a new coin to the watchlist"
+              "text": "Choose a coin or type its ticker."
             }
           }
         ],
         "send": {
           "callback": "add_coin:start"
         }
-      }
+      },
+      { "send": { "text": "BTCC" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Couldn't find BTCC. Did you mean BTC?" } }] },
+      { "send": { "callback": "add_coin:confirm:BTC" }, "expect": [{ "method": "sendMessage", "payload": { "text": "BTC is now on your watchlist." } }] }
     ]
   }
 ]

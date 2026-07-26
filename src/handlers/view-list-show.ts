@@ -1,17 +1,15 @@
 import { Composer } from "grammy";
+import type { Ctx } from "../bot.js";
+import { applyQuotes, evaluateAlerts, fetchQuotes, profileFor, watchlistText } from "../crypto.js";
+import { inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
 
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "View list", data: "view_list:show" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
+registerMainMenuItem({ label: "View list", data: "view_list:show", order: 20 });
+const composer = new Composer<Ctx>();
 composer.callbackQuery("view_list:show", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.reply("Display current watchlist with prices");
+  const profile = profileFor(ctx);
+  if (profile.watchlist.length) { applyQuotes(profile, await fetchQuotes(profile.watchlist)); }
+  await ctx.reply(watchlistText(profile), { reply_markup: inlineKeyboard([[inlineButton("Back to menu", "menu:main")]]) });
+  for (const alert of evaluateAlerts(profile)) await ctx.reply(alert);
 });
-
 export default composer;

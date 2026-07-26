@@ -7,14 +7,16 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Configure quiet hours for alert suppression"
+              "text": "Send the quiet-hours start time in UTC, like 22:00."
             }
           }
         ],
         "send": {
           "callback": "quiet_hours:start"
         }
-      }
+      },
+      { "send": { "text": "22:00" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Now send the end time in UTC, like 07:00." } }] },
+      { "send": { "text": "07:00" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Alerts will stay quiet from 22:00 to 07:00 UTC. Queued alerts arrive afterwards." } }] }
     ]
   }
 ]
