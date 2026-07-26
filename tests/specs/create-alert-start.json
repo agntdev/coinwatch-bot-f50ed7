@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Create alert",
+    "steps": [
+      {
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Set up a new price alert rule"
+            }
+          }
+        ],
+        "send": {
+          "callback": "create_alert:start"
+        }
+      }
+    ]
+  }
+]
