@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Set quiet hours",
+    "steps": [
+      {
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "Configure quiet hours for alert suppression"
+            }
+          }
+        ],
+        "send": {
+          "callback": "quiet_hours:start"
+        }
+      }
+    ]
+  }
+]
